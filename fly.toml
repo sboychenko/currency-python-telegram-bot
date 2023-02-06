@@ -1,0 +1,8 @@
+# fly.toml file generated for currency-bot on 2023-02-07T01:00:54+08:00
+
+app = "currency-bot"
+kill_signal = "SIGINT"
+kill_timeout = 5
+processes = []
+
+[env]
