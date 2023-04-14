@@ -1,12 +1,15 @@
 import logging
+import math
 import os
 import matplotlib.pyplot as plt
 import pytz
 import redis
 import io
-import modules.parsers
+from datetime import datetime, time, timedelta
+from telegram import ParseMode
 from telegram.ext import Updater, CommandHandler
-from datetime import datetime, time
+
+import modules.parsers
 
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
@@ -24,23 +27,27 @@ class CurrencyInfo:
 
 
 def command_help(update, context):
+    logging.info("Help command")
     message = 'Welcome to the MIR-BNB currency bot'
-    context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN)
 
 
 def command_solve_currency(update, context):
+    logging.info("Now command")
     ci = solve_currency()
     message = build_currency_info(ci)
-    context.bot.send_message(chat_id=update.effective_chat.id, text=message)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN)
 
 
 def job_solve_currency(context):
+    logging.info("Start currency job")
     ci = solve_currency()
     save_to_redis(ci)
+    last_ci = get_last_currency(ci.date)
 
     img = build_graph()
-    text = build_currency_info(ci)
-    context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=img, caption=text)
+    text = build_currency_info(ci, last_ci)
+    context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=img, caption=text, parse_mode=ParseMode.MARKDOWN)
 
 
 def save_to_redis(ci):
@@ -50,6 +57,28 @@ def save_to_redis(ci):
     r.set(f'rate:{modules.parsers.USD}-BNB:{d}', ci.usd_bnb, ex=15_000)
     r.set(f'rate:{modules.parsers.USD}-MIR:{d}', ci.usd_bnb_mir, ex=15_000)
     r.set(f'rate:{modules.parsers.USD}-CBR:{d}', ci.usd_cbr, ex=15_000)
+
+
+def get_last_currency(date):
+    yesterday = date - timedelta(days=1)
+    pattern = yesterday.strftime('%Y-%m-%d')
+
+    data = []
+    for key in r.scan_iter(f"rate:*:{pattern}*"):
+        data.append((key, r.get(key)))
+
+    ci = CurrencyInfo(yesterday, None, None, None, None)
+    for key, value in data:
+        value = float(value)
+        if "USD-MIR" in key:
+            ci.usd_bnb_mir = value
+        if "BYN-MIR" in key:
+            ci.byn_mir = value
+        if "USD-BNB" in key:
+            ci.usd_bnb = value
+        if "USD-CBR" in key:
+            ci.usd_cbr = value
+    return ci
 
 
 def solve_currency():
@@ -69,22 +98,44 @@ def solve_currency():
     return CurrencyInfo(date, byn_mir, usd_bnb, usd_bnb_mir, usd_cbr)
 
 
-def build_currency_info(ci):
-    message = f"\U0001F4B5: {ci.usd_bnb_mir:.2f} (+{(ci.usd_bnb_mir - ci.usd_cbr):.2f})\n\n"
-    message += f"\tCBR: {ci.usd_cbr:.2f}\n"
-    message += f"\tBNB: {ci.usd_bnb}\n"
-    message += f"\tMIR: {ci.byn_mir}\n\n"
-    message += f"Date: {ci.date.strftime('%d/%m/%Y %H:%M')}\n\n"
+def build_currency_info(ci, last_ci=None):
+    message = f"*\U0001F4B5: {ci.usd_bnb_mir:.2f}* | Δ{(ci.usd_bnb_mir - ci.usd_cbr):.2f}"
+    if last_ci and last_ci.usd_bnb_mir:
+        delta = ci.usd_bnb_mir - last_ci.usd_bnb_mir
+        add = create_info(delta)
+        message += f" | {add[0]} {add[1]}"
+    message += "\n\n"
+
+    delta = ci.usd_cbr - last_ci.usd_cbr if last_ci and last_ci.usd_cbr else None
+    add = create_info(delta)
+    message += f"\tCBR: {ci.usd_cbr:.2f} | {add[1]}\n"
+
+    delta = ci.usd_bnb - last_ci.usd_bnb if last_ci and last_ci.usd_bnb else None
+    add = create_info(delta)
+    message += f"\tBNB: {ci.usd_bnb:.2f} | {add[1]}\n"
+
+    delta = ci.byn_mir - last_ci.byn_mir if last_ci and last_ci.byn_mir else None
+    add = create_info(delta)
+    message += f"\tMIR: {ci.byn_mir:.2f} | {add[1]}\n"
+
+    message += f"\n\U0001F4C6 {ci.date.strftime('%d/%m/%Y %H:%M')}\n\n"
 
     return message
+
+
+def create_info(delta):
+    sign = "\U00002B1C"
+    info = ""
+    if delta:
+        sign = "\U00002B1C" if delta == 0 else "\U0001F4C9" if math.copysign(1, delta) == -1 else "\U0001F4C8"
+        info = f"_{delta:.2f}_"
+    return sign, info
 
 
 def build_graph():
     data = []
     for key in r.scan_iter("rate:*"):
         data.append((key, r.get(key)))
-
-    print(data)
 
     result = {}
     for row in data:
@@ -95,7 +146,7 @@ def build_graph():
             result[elements[1]] = []
         result[elements[1]].append((rate, date))
 
-    print(result)
+    logging.debug("Data for graph: ", result)
 
     fig, ax = plt.subplots(2, sharex=True)
     fig.suptitle('USD rate for the last 10 days')
@@ -127,11 +178,14 @@ def build_graph():
 def test(update, context):
     # job_solve_currency(context)
 
-    ci = CurrencyInfo(datetime.now(), 23.32, 234.234, 234.234, 2544.433)
-    text = build_currency_info(ci)
+    date = datetime.now()
+    ci = get_last_currency(date + timedelta(days=1))
+    last_ci = get_last_currency(ci.date)
+
+    text = build_currency_info(ci, last_ci)
     img = build_graph()
-    context.bot.send_photo(chat_id=update.effective_chat.id, photo=img, caption=text)
-    # context.bot.send_message(chat_id=update.effective_chat.id, text=text)
+    context.bot.send_photo(chat_id=update.effective_chat.id, photo=img, caption=text, parse_mode=ParseMode.MARKDOWN)
+    # context.bot.send_message(chat_id=update.effective_chat.id, text=text, parse_mode=ParseMode.MARKDOWN)
 
 
 # Bot for send currency to CHAT_ID

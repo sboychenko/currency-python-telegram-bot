@@ -19,8 +19,6 @@ flyctl secrets list
 
 Для деплоя
 ```
-cd ./currency-bot
-
 pip3 freeze > requirements.txt
 
 flyctl scale count 1|0
