@@ -1,6 +1,10 @@
+import pytz
 import requests
 import xml.etree.ElementTree as et
 from bs4 import BeautifulSoup
+from datetime import datetime
+
+from modules.storage import CurrencyInfo
 
 headers = {
     'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) '
@@ -76,3 +80,19 @@ def get_rate(currencies, code):
     print(currencies)
     return float(find[0][1].replace(",", "."))
 
+
+def solve_currency():
+    date = datetime.now(tz=pytz.timezone('Europe/Moscow'))
+
+    mir_currencies = get_mir_currency_info()
+    byn_mir = get_rate(mir_currencies, 'Белорусский рубль')
+
+    bnb_currencies = get_bnb_currency_info()
+    usd_bnb = get_rate(bnb_currencies, USD)
+
+    usd_bnb_mir = byn_mir * usd_bnb
+
+    cbr_currencies = get_cbr_currency_info()
+    usd_cbr = get_rate(cbr_currencies, USD)
+
+    return CurrencyInfo(date, byn_mir, usd_bnb, usd_bnb_mir, usd_cbr)
