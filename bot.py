@@ -30,7 +30,7 @@ def job_solve_currency(context):
     logging.info("Start currency job")
     ci = parsers.solve_currency()
     storage.save_to_redis(r, ci)
-    last_ci = storage.get_last_currency(ci.date)
+    last_ci = storage.get_last_currency(r, ci.date)
 
     img = view.build_graph()
     text = view.build_currency_info(ci, last_ci)
@@ -42,7 +42,7 @@ def get_all_redis(update, context):
 
 
 def test(update, context):
-    # job_solve_currency(context)
+    job_solve_currency(context)
     context.bot.send_message(chat_id=update.effective_chat.id, text="done", parse_mode=ParseMode.MARKDOWN)
 
 

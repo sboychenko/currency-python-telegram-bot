@@ -50,8 +50,8 @@ def get_all(redis):
     return data
 
 
-def clear():
-    r.flushall()
-    r.flushdb()
-    for key in r.scan_iter("*"):
-        r.delete(key)
+def clear(redis):
+    redis.flushall()
+    redis.flushdb()
+    for key in redis.scan_iter("*"):
+        redis.delete(key)
