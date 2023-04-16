@@ -32,13 +32,13 @@ def job_solve_currency(context):
     storage.save_to_redis(r, ci)
     last_ci = storage.get_last_currency(r, ci.date)
 
-    img = view.build_graph()
+    img = view.build_graph(r)
     text = view.build_currency_info(ci, last_ci)
     context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=img, caption=text, parse_mode=ParseMode.MARKDOWN)
 
 
 def get_all_redis(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text=storage.get_all(r), parse_mode=ParseMode.MARKDOWN)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=storage.get_all(r, "*"), parse_mode=ParseMode.MARKDOWN)
 
 
 def test(update, context):

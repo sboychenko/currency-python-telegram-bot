@@ -1,7 +1,7 @@
 import io
 import logging
-
 from matplotlib import pyplot as plt
+from modules import storage
 
 
 def build_currency_info(ci, last_ci=None):
@@ -38,10 +38,8 @@ def create_info(delta):
     return sign, info
 
 
-def build_graph():
-    data = []
-    for key in r.scan_iter("rate:*"):
-        data.append((key, r.get(key)))
+def build_graph(redis):
+    data = storage.get_all(redis, "rate:*")
 
     result = {}
     for row in data:

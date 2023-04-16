@@ -43,9 +43,9 @@ def get_last_currency(redis, date):
     return ci
 
 
-def get_all(redis):
+def get_all(redis, pattern):
     data = []
-    for key in redis.scan_iter("*"):
+    for key in redis.scan_iter(pattern):
         data.append((key, redis.get(key)))
     return data
 
