@@ -28,17 +28,28 @@ def command_solve_currency(update, context):
 
 def job_solve_currency(context):
     logging.info("Start currency job")
-    ci = parsers.solve_currency()
-    storage.save_to_redis(r, ci)
-    last_ci = storage.get_last_currency(r, ci.date)
+    ci = None
+    try:
+        r.ping()
+        ci = parsers.solve_currency()
+        storage.save_to_redis(r, ci)
+    except:
+        logging.error("Error save to redis")
 
-    img = view.build_graph(r)
-    text = view.build_currency_info(ci, last_ci)
-    context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=img, caption=text, parse_mode=ParseMode.MARKDOWN)
+    try:
+        last_ci = storage.get_last_currency(r, ci.date)
+        img = view.build_graph(r)
+        text = view.build_currency_info(ci, last_ci)
+        context.bot.send_photo(chat_id=ADMIN_CHAT_ID, photo=img, caption=text, parse_mode=ParseMode.MARKDOWN)
+    except:
+        logging.error("Error get last from redis")
+        message = view.build_currency_info(ci)
+        context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=message, parse_mode=ParseMode.MARKDOWN)
 
 
 def get_all_redis(update, context):
-    context.bot.send_message(chat_id=update.effective_chat.id, text=storage.get_all(r, "*"), parse_mode=ParseMode.MARKDOWN)
+    context.bot.send_message(chat_id=update.effective_chat.id, text=storage.get_all(r, "*"),
+                             parse_mode=ParseMode.MARKDOWN)
 
 
 def test(update, context):
@@ -54,7 +65,7 @@ if __name__ == "__main__":
 
     j = updater.job_queue
     r = redis.StrictRedis(host=REDIS_HOST, password=REDIS_PASS, port=6379, db=0,
-                          charset="utf-8", decode_responses=True)
+                          charset="utf-8", decode_responses=True, health_check_interval=3600)
 
     start_handler = CommandHandler('start', command_help)
     dispatcher.add_handler(start_handler)
